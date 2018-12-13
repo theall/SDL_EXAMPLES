@@ -11,10 +11,11 @@
 #define TILE_YELLOWSTAR  2
 #define TILE_REDSTAR  3
 
-#define TILE_WIDTH 20
-#define TILE_HEIGHT 15
+#define TILE_COLUMNS 40
+#define TILE_ROWS 20
 
 #define GRID_SIZE 32
+#define APPLE_COUNT 1
 
 SDL_Surface *loadImage(char *path)
 {
@@ -30,12 +31,6 @@ enum Dir
     DOWN,
     RIGHT
 };
-typedef struct
-{
-    int x;
-    int y;
-    int sprite;
-} Tile;
 
 typedef struct
 {
@@ -43,9 +38,9 @@ typedef struct
     int y;
 } Coordine;
 
-Tile g_Tiles[TILE_HEIGHT][TILE_WIDTH];
-Coordine g_snakeList[TILE_WIDTH*TILE_HEIGHT];
-Coordine apples[10] = {0};
+int g_Tiles[TILE_ROWS][TILE_COLUMNS];
+Coordine g_snakeList[TILE_COLUMNS*TILE_ROWS];
+Coordine g_apples[APPLE_COUNT] = {0};
 Dir g_nextDir;
 int g_snakeLength;
 float g_speed;
@@ -60,15 +55,15 @@ SDL_Surface *g_redStar;
 void resetTiles()
 {
     int i,j;
-    for(i=0; i<TILE_HEIGHT; i++)
+    for(i=0; i<TILE_ROWS; i++)
     {
-        for(j=0; j<TILE_WIDTH; j++)
+        for(j=0; j<TILE_COLUMNS; j++)
         {
-            if(i==0 || i==(TILE_HEIGHT-1) || j==0 || j==(TILE_WIDTH-1))
-                g_Tiles[i][j].sprite = TILE_GREENSTAR;
+            if(i==0 || i==(TILE_ROWS-1) || j==0 || j==(TILE_COLUMNS-1))
+                g_Tiles[i][j] = TILE_GREENSTAR;
             else
             {
-                g_Tiles[i][j].sprite = 0;
+                g_Tiles[i][j] = 0;
             }
         }
     }
@@ -76,7 +71,7 @@ void resetTiles()
 
 void reset()
 {
-    int tile_total = TILE_WIDTH*TILE_HEIGHT;
+    int tile_total = TILE_COLUMNS*TILE_ROWS;
 
     int i;
     for(i=0; i<tile_total; i++)
@@ -99,9 +94,9 @@ void reset()
 bool isApple(Coordine pos)
 {
     int j;
-    for(j=0; j<10; j++)
+    for(j=0; j<APPLE_COUNT; j++)
     {
-        if(pos.x==apples[j].x && pos.y==apples[j].y)
+        if(pos.x==g_apples[j].x && pos.y==g_apples[j].y)
         {
             return true;
         }
@@ -122,10 +117,14 @@ bool isSnakeBody(Coordine pos)
     return false;
 }
 
-Coordine getNextTilePos()
+int getDistance(Coordine c1, Coordine c2)
 {
-    Coordine nextPos = g_snakeList[0];
-    switch(g_nextDir)
+    return abs(c1.x-c2.x) + abs(c1.y-c2.y);
+}
+
+Coordine getNextCoorFromDir(Coordine nextPos, Dir dir)
+{
+    switch(dir)
     {
     case UP:
         nextPos.y--;
@@ -143,7 +142,12 @@ Coordine getNextTilePos()
     return nextPos;
 }
 
-Dir generateNextDir()
+Coordine getNextTilePos()
+{
+    return getNextCoorFromDir(g_snakeList[0], g_nextDir);
+}
+
+void generateNextDir()
 {
     int i, j;
 
@@ -151,81 +155,42 @@ Dir generateNextDir()
     int y = g_snakeList[0].y;
     Dir possibleDirs[4];
     int dirCount = 0;
-    Coordine nextPos = getNextTilePos();
-    bool isEmpty = g_Tiles[nextPos.y][nextPos.x].sprite==0;
-    if(isEmpty)
+    bool getApple = false;
+    for(i=0; i<4; i++)
     {
-        int minDx = 99999;
-        int minDy = 99999;
-        for(i=0; i<10; i++)
+        Coordine nextPossiblePos = getNextCoorFromDir(g_snakeList[0], (Dir)i);
+        if(isApple(nextPossiblePos))
         {
-            int dx = abs(apples[i].x-g_snakeList[0].x);
-            int dy = abs(apples[i].y-g_snakeList[0].y);
-            if(abs(minDx)+abs(minDy)>dx+dy)
-            {
-                minDx = apples[i].x;
-                minDy = apples[i].y;
-            }
+            getApple = true;
+            g_nextDir = (Dir)i;
+            break;
         }
-        if(abs(minDx) > abs(minDy))
+        if(!isSnakeBody(nextPossiblePos) && g_Tiles[nextPossiblePos.y][nextPossiblePos.x]==0)
         {
-            if(minDy>0)
-            {
-                if(g_nextDir!=UP)
-                    g_nextDir = DOWN;
-            }
-            else
-            {
-                if(g_nextDir!=DOWN)
-                    g_nextDir = UP;
-            }
+            possibleDirs[dirCount] = (Dir)i;
+            dirCount++;
+        }
+    }
+    if(!getApple)
+    {
+        if(dirCount==0)
+        {
+            g_died = true;
         }
         else
         {
-            if(minDx>0)
+            int minDistance = TILE_COLUMNS * TILE_ROWS;
+            int minIndex = 0;
+            // choose one direction
+            for(i=0;i<dirCount;i++)
             {
-                if(g_nextDir!=LEFT)
-                    g_nextDir = RIGHT;
+                int distance = getDistance(getNextCoorFromDir(g_snakeList[0], possibleDirs[i]), g_apples[0]);
+                if(minDistance > distance) {
+                    minDistance = distance;
+                    minIndex = i;
+                }
             }
-            else
-            {
-                if(g_nextDir!=RIGHT)
-                    g_nextDir = LEFT;
-            }
-        }
-    }
-    else
-    {
-        Coordine t[4] = {{0,-1},{-1,0},{0,1},{1,0}};
-        bool getApple = false;
-        for(i=0; i<4; i++)
-        {
-            Coordine nextPossiblePos = g_snakeList[0];
-            nextPossiblePos.x += t[i].x;
-            nextPossiblePos.y += t[i].y;
-
-            if(isApple(nextPossiblePos))
-            {
-                getApple = true;
-                g_nextDir = (Dir)i;
-                break;
-            }
-            if(!isSnakeBody(nextPossiblePos) && g_Tiles[nextPossiblePos.y][nextPossiblePos.x].sprite==0)
-            {
-                possibleDirs[dirCount] = (Dir)i;
-                dirCount++;
-            }
-        }
-        if(!getApple)
-        {
-            if(dirCount==0)
-            {
-                g_died = true;
-            }
-            else
-            {
-                g_nextDir = possibleDirs[rand()%dirCount];
-            }
+            g_nextDir = possibleDirs[minIndex];
         }
     }
 }
@@ -238,29 +203,16 @@ void update()
     int i, j;
     for(i=0; i<g_snakeLength; i++)
     {
-        g_Tiles[g_snakeList[i].y][g_snakeList[i].x].sprite = 0;
+        g_Tiles[g_snakeList[i].y][g_snakeList[i].x] = 0;
     }
 
-    // check died
-    g_died = g_snakeList[0].x==0 || g_snakeList[0].x==TILE_WIDTH-1 || g_snakeList[0].y==0 || g_snakeList[0].y==TILE_HEIGHT-1;
-    if(!g_died)
+    for(i=0; i<APPLE_COUNT; i++)
     {
-        for(i=1; i<g_snakeLength; i++)
-        {
-            if(g_snakeList[0].x==g_snakeList[i].x && g_snakeList[0].y==g_snakeList[i].y)
-            {
-                g_died = true;
-                break;
-            }
-        }
-    }
-    for(i=0; i<10; i++)
-    {
-        if(apples[i].x==g_snakeList[0].x && apples[i].y==g_snakeList[0].y)
+        if(g_apples[i].x==g_snakeList[0].x && g_apples[i].y==g_snakeList[0].y)
         {
             g_snakeLength++;
-            apples[i].x = 0;
-            apples[i].y = 0;
+            g_apples[i].x = 0;
+            g_apples[i].y = 0;
             SDL_Delay(100);
             //speed += 0.2;
             break;
@@ -274,32 +226,18 @@ void update()
     }
 
     // next direction
-    switch(g_nextDir)
-    {
-    case UP:
-        g_snakeList[0].y--;
-        break;
-    case RIGHT:
-        g_snakeList[0].x++;
-        break;
-    case LEFT:
-        g_snakeList[0].x--;
-        break;
-    case DOWN:
-        g_snakeList[0].y++;
-        break;
-    }
+    g_snakeList[0] = getNextTilePos();
 
     // place apple
     // first find all the empty tiles
-    Coordine emptyTileList[TILE_HEIGHT*TILE_WIDTH];
+    Coordine emptyTileList[TILE_ROWS*TILE_COLUMNS];
     int emptyTileCount = 0;
-    for(i=0; i<TILE_HEIGHT; i++)
+    for(i=0; i<TILE_ROWS; i++)
     {
         int j;
-        for(j=0; j<TILE_WIDTH; j++)
+        for(j=0; j<TILE_COLUMNS; j++)
         {
-            if(g_Tiles[i][j].sprite==0)
+            if(g_Tiles[i][j]==0)
             {
                 emptyTileList[emptyTileCount].x = j;
                 emptyTileList[emptyTileCount].y = i;
@@ -307,34 +245,42 @@ void update()
             }
         }
     }
-    for(i=0; i<10; i++)
+    for(i=0; i<APPLE_COUNT; i++)
     {
-        if(apples[i].x==0 && apples[i].y==0)
+        if(g_apples[i].x==0 && g_apples[i].y==0)
         {
             int index = rand() % emptyTileCount;
-            apples[i] = emptyTileList[index];
+            g_apples[i] = emptyTileList[index];
         }
     }
-    for(i=0; i<10; i++)
+    for(i=0; i<APPLE_COUNT; i++)
     {
-        if(apples[i].x==0 && apples[i].y==0)
+        if(g_apples[i].x==0 && g_apples[i].y==0)
         {
             continue;
         }
-        g_Tiles[apples[i].y][apples[i].x].sprite = TILE_YELLOWSTAR;
+        g_Tiles[g_apples[i].y][g_apples[i].x] = TILE_YELLOWSTAR;
     }
 
     // update snake
-    g_Tiles[g_snakeList[0].y][g_snakeList[0].x].sprite = TILE_REDSTAR;
+    g_Tiles[g_snakeList[0].y][g_snakeList[0].x] = TILE_REDSTAR;
     for(i=1; i<g_snakeLength; i++)
     {
-        g_Tiles[g_snakeList[i].y][g_snakeList[i].x].sprite = TILE_YELLOWSTAR;
+        g_Tiles[g_snakeList[i].y][g_snakeList[i].x] = TILE_YELLOWSTAR;
 
     }
 
     if(g_autoRun)
     {
-        g_nextDir = generateNextDir();
+        generateNextDir();
+    }
+    else
+    {
+        Coordine nextPos = getNextTilePos();
+        if(g_Tiles[nextPos.y][nextPos.x] == TILE_GREENSTAR || isSnakeBody(nextPos))
+        {
+            g_died = true;
+        }
     }
 }
 
@@ -343,9 +289,9 @@ void render()
     int i, j;
     // clear screen
     SDL_FillRect(g_screen, 0, SDL_MapRGB(g_screen->format, 255, 255, 255));
-    for(i=0; i<TILE_HEIGHT; i++)
+    for(i=0; i<TILE_ROWS; i++)
     {
-        for(j=0; j<TILE_WIDTH; j++)
+        for(j=0; j<TILE_COLUMNS; j++)
         {
             SDL_Rect r;
             r.x = j*GRID_SIZE;
@@ -354,7 +300,7 @@ void render()
             r.h = GRID_SIZE;
             SDL_Surface *bmp = NULL;
 
-            int sprite = g_Tiles[i][j].sprite;
+            int sprite = g_Tiles[i][j];
             if(sprite==TILE_GREENSTAR)
             {
                 bmp = g_greenStar;
@@ -377,10 +323,9 @@ void render()
 
 int main ( int argc, char** argv )
 {
-    bool autoRun = true;
     if(argc>1 && strcmp(argv[1], "auto")==0)
     {
-        autoRun = true;
+        g_autoRun = true;
     }
     // initialize SDL video
     if ( SDL_Init( SDL_INIT_VIDEO ) < 0 )
@@ -393,8 +338,8 @@ int main ( int argc, char** argv )
     atexit(SDL_Quit);
 
     // create a new window
-    g_screen = SDL_SetVideoMode(640, 480, 16,
-                                           SDL_HWSURFACE|SDL_DOUBLEBUF);
+    g_screen = SDL_SetVideoMode(GRID_SIZE*TILE_COLUMNS, GRID_SIZE*TILE_ROWS, 16,
+                                SDL_HWSURFACE|SDL_DOUBLEBUF);
     if ( !g_screen )
     {
         printf("Unable to set 640x480 video: %s\n", SDL_GetError());
@@ -430,15 +375,15 @@ int main ( int argc, char** argv )
             {
                 int tileX = event.button.x/GRID_SIZE;
                 int tileY = event.button.y/GRID_SIZE;
-                if(g_Tiles[tileY][tileX].sprite)
+                if(g_Tiles[tileY][tileX])
                 {
-                    g_Tiles[tileY][tileX].sprite = 0;
+                    g_Tiles[tileY][tileX] = 0;
                 }
                 else
                 {
-                    apples[0].x = tileX;
-                    apples[0].y = tileY;
-                    //g_Tiles[tileX][tileY].sprite = TILE_GREENSTAR;
+                    g_apples[0].x = tileX;
+                    g_apples[0].y = tileY;
+                    //g_Tiles[tileX][tileY] = TILE_GREENSTAR;
                 }
                 break;
             }
@@ -453,7 +398,7 @@ int main ( int argc, char** argv )
                 }
                 else if(key == SDLK_1)
                 {
-                    g_Tiles[rand()%TILE_WIDTH][rand()%TILE_HEIGHT].sprite = TILE_GREENSTAR;
+                    g_Tiles[rand()%TILE_COLUMNS][rand()%TILE_ROWS] = TILE_GREENSTAR;
                 }
                 else if(key == SDLK_EQUALS)
                 {
@@ -487,7 +432,7 @@ int main ( int argc, char** argv )
                 }
                 else if(key == SDLK_SPACE)
                 {
-                    autoRun = !autoRun;
+                    g_autoRun = !g_autoRun;
                 }
 
                 break;
@@ -497,6 +442,7 @@ int main ( int argc, char** argv )
 
         if(g_died)
         {
+            SDL_Delay(500);
             reset();
         }
         else if(g_frames%interval==0)

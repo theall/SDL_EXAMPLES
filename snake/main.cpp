@@ -11,11 +11,14 @@
 #define TILE_YELLOWSTAR  2
 #define TILE_REDSTAR  3
 
-#define TILE_COLUMNS 40
-#define TILE_ROWS 20
+#define TILE_COLUMNS 10
+#define TILE_ROWS 10
 
 #define GRID_SIZE 32
 #define APPLE_COUNT 1
+
+#define DISTANCE_STUB      9999
+#define DISTANCE_RIGID     10000
 
 SDL_Surface *loadImage(char *path)
 {
@@ -38,6 +41,13 @@ typedef struct
     int y;
 } Coordine;
 
+typedef struct
+{
+    Coordine pos;
+    int distance;
+    Dir relativeDir;
+}CoordineStep;
+
 int g_Tiles[TILE_ROWS][TILE_COLUMNS];
 Coordine g_snakeList[TILE_COLUMNS*TILE_ROWS];
 Coordine g_apples[APPLE_COUNT] = {0};
@@ -51,6 +61,37 @@ SDL_Surface *g_screen;
 SDL_Surface *g_greenStar;
 SDL_Surface *g_yellowStar;
 SDL_Surface *g_redStar;
+
+
+int getDistance(Coordine c1, Coordine c2)
+{
+    return abs(c1.x-c2.x) + abs(c1.y-c2.y);
+}
+
+Coordine getNextCoorFromDir(Coordine currentPos, Dir dir)
+{
+    switch(dir)
+    {
+    case UP:
+        currentPos.y--;
+        break;
+    case RIGHT:
+        currentPos.x++;
+        break;
+    case LEFT:
+        currentPos.x--;
+        break;
+    case DOWN:
+        currentPos.y++;
+        break;
+    }
+    return currentPos;
+}
+
+Coordine getNextTilePos()
+{
+    return getNextCoorFromDir(g_snakeList[0], g_nextDir);
+}
 
 void resetTiles()
 {
@@ -66,6 +107,57 @@ void resetTiles()
                 g_Tiles[i][j] = 0;
             }
         }
+    }
+}
+
+int removeFirst(Coordine a[], int arraySize)
+{
+    int i;
+    for(i=1; i<arraySize; i++)
+    {
+        a[i-1] = a[i];
+    }
+    return arraySize-1;
+}
+
+void fillTileDistanceFromPos(int distance[TILE_ROWS][TILE_COLUMNS], Coordine pos)
+{
+    int i,j;
+    for(i=0; i<TILE_ROWS; i++)
+    {
+        for(j=0; j<TILE_COLUMNS; j++)
+        {
+            if(i==0 || i==(TILE_ROWS-1) || j==0 || j==(TILE_COLUMNS-1))
+                distance[i][j] = DISTANCE_RIGID;
+            else
+            {
+                distance[i][j] = DISTANCE_STUB;
+            }
+        }
+    }
+    for(i=0; i<g_snakeLength; i++)
+    {
+        distance[g_snakeList[i].y][g_snakeList[i].x] = DISTANCE_RIGID;
+    }
+    distance[pos.y][pos.x] = 0;
+    Coordine pointList[TILE_ROWS*TILE_COLUMNS];
+    pointList[0] = pos;
+    int remainPointsCount = 1;
+    while(remainPointsCount)
+    {
+        Coordine frontPos = pointList[0];
+        remainPointsCount = removeFirst(pointList, remainPointsCount);
+        for(i=0; i<4; i++)
+        {
+            Coordine nextPos = getNextCoorFromDir(frontPos, (Dir)i);
+            if(distance[nextPos.y][nextPos.x] == DISTANCE_STUB)
+            {
+                // Is empty tile
+                distance[nextPos.y][nextPos.x] = distance[frontPos.y][frontPos.x] + 1;
+                pointList[remainPointsCount++] = nextPos;
+            }
+        }
+
     }
 }
 
@@ -117,81 +209,66 @@ bool isSnakeBody(Coordine pos)
     return false;
 }
 
-int getDistance(Coordine c1, Coordine c2)
+Dir coordineToDir(Coordine d)
 {
-    return abs(c1.x-c2.x) + abs(c1.y-c2.y);
-}
-
-Coordine getNextCoorFromDir(Coordine nextPos, Dir dir)
-{
-    switch(dir)
+    Dir i;
+    if(d.x==0)
     {
-    case UP:
-        nextPos.y--;
-        break;
-    case RIGHT:
-        nextPos.x++;
-        break;
-    case LEFT:
-        nextPos.x--;
-        break;
-    case DOWN:
-        nextPos.y++;
-        break;
+        i = d.y>0?DOWN:UP;
+    } else {
+        i = d.x>0?RIGHT:LEFT;
     }
-    return nextPos;
+    return i;
 }
 
-Coordine getNextTilePos()
+int getNextReachablePosList(Coordine source, Coordine destination, CoordineStep cs[])
 {
-    return getNextCoorFromDir(g_snakeList[0], g_nextDir);
+    int distance[TILE_ROWS][TILE_COLUMNS];
+    fillTileDistanceFromPos(distance, destination);
+    int i;
+    int index = 0;
+    for(i=0;i<4;i++)
+    {
+        Coordine nextPos = getNextCoorFromDir(source, (Dir)i);
+        int step = distance[nextPos.y][nextPos.x];
+        if(step>=0 && step<DISTANCE_STUB)
+        {
+            cs[index].distance = step;
+            cs[index].pos = nextPos;
+            cs[index].relativeDir = (Dir)i;
+            index++;
+        }
+    }
+    return index;
+}
+
+bool isReachable(Coordine source, Coordine destination)
+{
+    CoordineStep cs[4];
+    int posCount = getNextReachablePosList(source, destination, cs);
+    return posCount>0;
 }
 
 void generateNextDir()
 {
-    int i, j;
-
-    int x = g_snakeList[0].x;
-    int y = g_snakeList[0].y;
-    Dir possibleDirs[4];
-    int dirCount = 0;
-    bool getApple = false;
-    for(i=0; i<4; i++)
+    CoordineStep cs[4];
+    int posSize = getNextReachablePosList(g_snakeList[0], g_apples[0], cs);
+    if(posSize > 0)
     {
-        Coordine nextPossiblePos = getNextCoorFromDir(g_snakeList[0], (Dir)i);
-        if(isApple(nextPossiblePos))
+        int i;
+        int m = cs[0].distance;
+        Dir findDir = cs[0].relativeDir;
+        for(i=1;i<posSize;i++)
         {
-            getApple = true;
-            g_nextDir = (Dir)i;
-            break;
-        }
-        if(!isSnakeBody(nextPossiblePos) && g_Tiles[nextPossiblePos.y][nextPossiblePos.x]==0)
-        {
-            possibleDirs[dirCount] = (Dir)i;
-            dirCount++;
-        }
-    }
-    if(!getApple)
-    {
-        if(dirCount==0)
-        {
-            g_died = true;
-        }
-        else
-        {
-            int minDistance = TILE_COLUMNS * TILE_ROWS;
-            int minIndex = 0;
-            // choose one direction
-            for(i=0;i<dirCount;i++)
+            if(m>cs[i].distance)
             {
-                int distance = getDistance(getNextCoorFromDir(g_snakeList[0], possibleDirs[i]), g_apples[0]);
-                if(minDistance > distance) {
-                    minDistance = distance;
-                    minIndex = i;
-                }
+                m = cs[i].distance;
+                findDir = cs[i].relativeDir;
             }
-            g_nextDir = possibleDirs[minIndex];
         }
+        g_nextDir = findDir;
+    } else {
+        // Currently no path found
     }
 }
 
@@ -200,7 +277,7 @@ void update()
     resetTiles();
 
     // clear snake
-    int i, j;
+    int i;
     for(i=0; i<g_snakeLength; i++)
     {
         g_Tiles[g_snakeList[i].y][g_snakeList[i].x] = 0;
@@ -219,6 +296,12 @@ void update()
         }
     }
 
+    Coordine nextPos = getNextTilePos();
+    if(g_Tiles[nextPos.y][nextPos.x] == TILE_GREENSTAR || isSnakeBody(nextPos))
+    {
+        g_died = true;
+        return;
+    }
     for(i=g_snakeLength-1; i>0; i--)
     {
         g_snakeList[i].x = g_snakeList[i-1].x;
@@ -226,7 +309,7 @@ void update()
     }
 
     // next direction
-    g_snakeList[0] = getNextTilePos();
+    g_snakeList[0] = nextPos;
 
     // place apple
     // first find all the empty tiles
@@ -273,14 +356,6 @@ void update()
     if(g_autoRun)
     {
         generateNextDir();
-    }
-    else
-    {
-        Coordine nextPos = getNextTilePos();
-        if(g_Tiles[nextPos.y][nextPos.x] == TILE_GREENSTAR || isSnakeBody(nextPos))
-        {
-            g_died = true;
-        }
     }
 }
 
@@ -347,16 +422,15 @@ int main ( int argc, char** argv )
     }
 
     // load an image
-    g_greenStar = loadImage("greenstar.bmp");
-    g_yellowStar = loadImage("yellowstar.bmp");
-    g_redStar = loadImage("redstar.bmp");
+    g_greenStar = loadImage((char*)"greenstar.bmp");
+    g_yellowStar = loadImage((char*)"yellowstar.bmp");
+    g_redStar = loadImage((char*)"redstar.bmp");
 
     srand(time(0));
     reset();
     // program main loop
     bool done = false;
     int interval = 60 / g_speed;
-    int i, j;
     while (!done)
     {
         // message processing loop

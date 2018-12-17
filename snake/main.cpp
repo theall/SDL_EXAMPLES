@@ -11,12 +11,13 @@
 #define TILE_GREENSTAR  1
 #define TILE_YELLOWSTAR  2
 #define TILE_REDSTAR  3
+#define TILE_GRAYSTAR 4
 
-#define TILE_COLUMNS 8
-#define TILE_ROWS 8
+#define TILE_COLUMNS 20
+#define TILE_ROWS 20
 
 #define GRID_SIZE 32
-#define APPLE_COUNT 1
+#define APPLE_COUNT 10
 
 #define DISTANCE_STUB      0x7ffffffe
 #define DISTANCE_RIGID     0x7fffffff
@@ -53,20 +54,7 @@ typedef struct
 } CoordineStep;
 
 int g_Tiles[TILE_ROWS][TILE_COLUMNS];
-Coordine g_snake[TILE_COLUMNS*TILE_ROWS] = {
-        {4,3},
-        {3,3},
-        {2,3},
-        {1,3},
-        {1,4},
-        {1,5},
-        {1,6},
-        {2,6},
-        {2,5},
-        {3,5},
-        {4,5},
-        {5,5}
-    };
+Coordine g_snake[TILE_COLUMNS*TILE_ROWS];
 Coordine g_apples[APPLE_COUNT] = {0};
 Dir g_nextDir;
 int g_snakeLength;
@@ -79,6 +67,7 @@ SDL_Surface *g_screen;
 SDL_Surface *g_greenStar;
 SDL_Surface *g_yellowStar;
 SDL_Surface *g_redStar;
+SDL_Surface *g_grayStar;
 
 int getNextReachablePosList(int distance[TILE_ROWS][TILE_COLUMNS], Coordine source, CoordineStep cs[]);
 
@@ -122,7 +111,7 @@ void resetTiles()
         for(j=0; j<TILE_COLUMNS; j++)
         {
             if(i==0 || i==(TILE_ROWS-1) || j==0 || j==(TILE_COLUMNS-1))
-                g_Tiles[i][j] = TILE_GREENSTAR;
+                g_Tiles[i][j] = TILE_GRAYSTAR;
             else
             {
                 g_Tiles[i][j] = 0;
@@ -144,7 +133,9 @@ int removeFirst(Coordine a[], int arraySize)
 void fillTileDistanceFromPos(int distance[TILE_ROWS][TILE_COLUMNS],
                              Coordine pos,
                              Coordine snake[],
-                             int snakeLength)
+                             int snakeLength,
+                             Coordine apples[] = 0,
+                             int appleSize = 0)
 {
     int i,j;
     for(i=0; i<TILE_ROWS; i++)
@@ -162,6 +153,10 @@ void fillTileDistanceFromPos(int distance[TILE_ROWS][TILE_COLUMNS],
     for(i=0; i<snakeLength; i++)
     {
         distance[snake[i].y][snake[i].x] = DISTANCE_RIGID;
+    }
+    for(i=0; i<appleSize; i++)
+    {
+        distance[apples[i].y][apples[i].x] = DISTANCE_RIGID;
     }
     distance[pos.y][pos.x] = 0;
     Coordine pointList[TILE_ROWS*TILE_COLUMNS];
@@ -184,21 +179,31 @@ void fillTileDistanceFromPos(int distance[TILE_ROWS][TILE_COLUMNS],
     }
 }
 
+void clearApples()
+{
+    int i;
+    for(i=0;i<APPLE_COUNT;i++)
+    {
+        g_apples[i].x = 0;
+        g_apples[i].y = 0;
+    }
+}
+
 void reset()
 {
-    g_apples[0] = {2,1};
     g_snakeLength = 12;
     g_nextDir = UP;
-//    g_snake[0].x = 3;
-//    g_snake[0].y = 1;
-//    g_snake[1].x = 2;
-//    g_snake[1].y = 1;
-//    g_snakeLength = 2;
-//    g_nextDir = DOWN;
-    g_speed = 1;
+    g_snake[0].x = 2;
+    g_snake[0].y = 1;
+    g_snake[1].x = 1;
+    g_snake[1].y = 1;
+    g_snakeLength = 2;
+    g_nextDir = DOWN;
+    g_speed = 16;
     g_frames = 0;
     g_died = false;
     g_paused = false;
+    clearApples();
 }
 
 bool isApple(Coordine pos)
@@ -247,7 +252,13 @@ bool isReachable(Coordine snake[], int snakeLength, Coordine destination)
     int distance[TILE_ROWS][TILE_COLUMNS];
     fillTileDistanceFromPos(distance, destination, snake, snakeLength);
     int posCount = getNextReachablePosList(distance, snake[0], cs);
-    return posCount>0;
+    int i;
+    for(i=0;i<posCount;i++)
+    {
+        if(cs[i].distance > 1)
+            return true;
+    }
+    return false;
 }
 
 bool canSimulate(int distanceTable[TILE_ROWS][TILE_COLUMNS],
@@ -301,6 +312,11 @@ int getNextReachablePosList(int distance[TILE_ROWS][TILE_COLUMNS], Coordine pos,
             cs[index].pos = nextPos;
             cs[index].relativeDir = (Dir)i;
             index++;
+        } else {
+            cs[index].distance = DISTANCE_RIGID;
+            cs[index].pos.x = DISTANCE_RIGID;
+            cs[index].pos.y = DISTANCE_RIGID;
+            cs[index].relativeDir = DIR_COUNT;
         }
     }
     return index;
@@ -311,7 +327,7 @@ Dir findMinDistanceDir(int distanceTable[TILE_ROWS][TILE_COLUMNS], Coordine pos,
     CoordineStep cs[4];
     int csSize = getNextReachablePosList(distanceTable, pos, cs);
     if(csSize < 0)
-        return UP;
+        return (Dir)(rand()%DIR_COUNT);
 
     int i;
     int m = cs[0].distance;
@@ -331,8 +347,8 @@ Dir findMaxDistanceDir(int distanceTable[TILE_ROWS][TILE_COLUMNS], Coordine pos,
 {
     CoordineStep cs[4];
     int csSize = getNextReachablePosList(distanceTable, pos, cs);
-    if(csSize < 0)
-        return UP;
+    if(csSize <= 0)
+        return DIR_COUNT;
 
     int i;
     int m = cs[0].distance;
@@ -355,8 +371,6 @@ bool canEatApple()
 
 int getPathDeep(int distanceTable[TILE_ROWS][TILE_COLUMNS], Coordine pos)
 {
-    static int g_currentPathDeep = 0;
-    static int g_maxPathDeep = -1;
     distanceTable[pos.y][pos.x] = DISTANCE_RIGID;
     int i;
     for(i=0; i<DIR_COUNT; i++)
@@ -372,10 +386,30 @@ int getPathDeep(int distanceTable[TILE_ROWS][TILE_COLUMNS], Coordine pos)
 
 Dir getRandomDir()
 {
-    int i;
     int distanceTable[TILE_ROWS][TILE_COLUMNS];
-    fillTileDistanceFromPos(distanceTable, g_apples[0], g_snake, g_snakeLength);
-    return findMaxDistanceDir(distanceTable, g_snake[0], g_nextDir);
+    fillTileDistanceFromPos(distanceTable, g_snake[0], g_snake, g_snakeLength);
+    Dir d = findMaxDistanceDir(distanceTable, g_snake[0], g_nextDir);
+    return d;
+}
+
+int getCloseApple()
+{
+    int i;
+    int minD = DISTANCE_RIGID;
+    int index = 0;
+    for(i=0; i<APPLE_COUNT; i++)
+    {
+        if(g_apples[i].x==0 || g_apples[i].y==0)
+            continue;
+
+        int d = abs(g_apples[i].x-g_snake[0].x) + abs(g_apples[i].y-g_snake[0].y);
+        if(minD>d)
+        {
+            minD = d;
+            index = i;
+        }
+    }
+    return index;
 }
 
 Dir getNextDir()
@@ -383,23 +417,22 @@ Dir getNextDir()
     int distanceTable[TILE_ROWS][TILE_COLUMNS];
     Coordine fakeSnake[TILE_ROWS*TILE_COLUMNS];
     memcpy(fakeSnake, g_snake, sizeof(Coordine)*TILE_ROWS*TILE_COLUMNS);
-    fillTileDistanceFromPos(distanceTable, g_apples[0], g_snake, g_snakeLength);
-    if(canSimulate(distanceTable, fakeSnake, g_snakeLength, g_apples[0]))
+    int appleIndex = getCloseApple();
+    fillTileDistanceFromPos(distanceTable, g_apples[appleIndex], g_snake, g_snakeLength);
+    bool canEat = canSimulate(distanceTable, fakeSnake, g_snakeLength, g_apples[appleIndex]);
+    if(canEat)
     {
         g_nextDir = findMinDistanceDir(distanceTable, g_snake[0], g_nextDir);
     }
     else
     {
-#ifdef _TEST
-        render();
-        SDL_SaveBMP(g_screen, "z:/sdl.bmp");
-        canSimulate(distanceTable, fakeSnake, g_snakeLength, g_apples[0]);
-#endif // _TEST
         Coordine snakeTail = g_snake[g_snakeLength-1];
-        if(isReachable(g_snake, g_snakeLength, snakeTail))
+        bool canFollowTrail = isReachable(g_snake, g_snakeLength, snakeTail);
+        if(canFollowTrail)
         {
             // Generate distance table with snake tail position
-            fillTileDistanceFromPos(distanceTable, snakeTail, g_snake, g_snakeLength);
+            fillTileDistanceFromPos(distanceTable, snakeTail, g_snake, g_snakeLength, g_apples, APPLE_COUNT);
+            distanceTable[snakeTail.y][snakeTail.x] = DISTANCE_RIGID;
             g_nextDir = findMaxDistanceDir(distanceTable, g_snake[0], g_nextDir);
         }
         else
@@ -408,12 +441,35 @@ Dir getNextDir()
             g_nextDir = getRandomDir();
         }
     }
-    Coordine nextPos = getNextTilePos();
-    if(g_Tiles[nextPos.y][nextPos.x] == TILE_GREENSTAR || isSnakeBody(nextPos))
-    {
-        //getNextDir();
+    if(g_nextDir >= DIR_COUNT) {
+        // invalid dir
+        g_nextDir = getRandomDir();
     }
     return g_nextDir;
+}
+
+Coordine fetchElement(Coordine el[], int arraySize, int index)
+{
+    Coordine result = {-1,-1};
+    if(index>=0 && index<arraySize)
+    {
+        int i;
+        result = el[index];
+        for(i=index; i<arraySize-1; i++)
+        {
+            el[i] = el[i+1];
+        }
+    }
+    return result;
+}
+
+void backSpaceForTest()
+{
+    int i;
+    for(i=0;i<g_snakeLength-1;i++)
+    {
+        g_snake[i] = g_snake[i+1];
+    }
 }
 
 void update()
@@ -422,23 +478,19 @@ void update()
 
     // clear snake
     int i;
-    for(i=0; i<APPLE_COUNT; i++)
-    {
-        if(g_apples[i].x==g_snake[0].x && g_apples[i].y==g_snake[0].y)
-        {
-            g_snakeLength++;
-            g_apples[i].x = 0;
-            g_apples[i].y = 0;
-            SDL_Delay(100);
-            //speed += 0.2;
-            break;
-        }
-    }
-
     Coordine nextPos = getNextTilePos();
-    if(g_Tiles[nextPos.y][nextPos.x] == TILE_GREENSTAR || isSnakeBody(nextPos))
+    if(g_Tiles[nextPos.y][nextPos.x] == TILE_GRAYSTAR || isSnakeBody(nextPos))
     {
+#ifdef _TEST
+        backSpaceForTest();
+        g_apples[0] = g_snake[0];
+        backSpaceForTest();
+        SDL_SaveBMP(g_screen, "z:/sdl.bmp");
+        g_nextDir = getNextDir();
+#endif // _TEST
+        isSnakeBody(nextPos);
         g_died = true;
+        reset();
         return;
     }
     for(i=g_snakeLength-1; i>0; i--)
@@ -450,12 +502,35 @@ void update()
     // next directionfindMaxDistanceDir
     g_snake[0] = nextPos;
 
+    // check apple ate
+    for(i=0; i<APPLE_COUNT; i++)
+    {
+        if(g_apples[i].x==g_snake[0].x && g_apples[i].y==g_snake[0].y)
+        {
+            g_snake[g_snakeLength] = g_snake[g_snakeLength-1];
+            g_snakeLength++;
+            g_apples[i].x = 0;
+            g_apples[i].y = 0;
+            SDL_Delay(100);
+            break;
+        }
+    }
+
+    // update apples
+    for(i=0; i<APPLE_COUNT; i++)
+    {
+        if(g_apples[i].x==0 || g_apples[i].y==0)
+        {
+            continue;
+        }
+        g_Tiles[g_apples[i].y][g_apples[i].x] = TILE_GREENSTAR;
+    }
     // update snake
-    g_Tiles[g_snake[0].y][g_snake[0].x] = TILE_REDSTAR;
     for(i=1; i<g_snakeLength; i++)
     {
         g_Tiles[g_snake[i].y][g_snake[i].x] = TILE_YELLOWSTAR;
     }
+    g_Tiles[g_snake[0].y][g_snake[0].x] = TILE_REDSTAR;
 
     // place apple
     // first find all the empty tiles
@@ -482,21 +557,13 @@ void update()
     // check if need generate new apple
     for(i=0; i<APPLE_COUNT; i++)
     {
-        if(g_apples[i].x==0 && g_apples[i].y==0)
+        if(g_apples[i].x==0 || g_apples[i].y==0)
         {
             int index = rand() % emptyTileCount;
-            g_apples[i] = emptyTileList[index];
+            g_apples[i] = fetchElement(emptyTileList, emptyTileCount, index);
+            emptyTileCount--;
         }
     }
-    for(i=0; i<APPLE_COUNT; i++)
-    {
-        if(g_apples[i].x==0 && g_apples[i].y==0)
-        {
-            continue;
-        }
-        g_Tiles[g_apples[i].y][g_apples[i].x] = TILE_YELLOWSTAR;
-    }
-    g_Tiles[g_snake[0].y][g_snake[0].x] = TILE_REDSTAR;
 
     if(g_autoRun)
     {
@@ -532,6 +599,10 @@ void render()
             else if(sprite==TILE_REDSTAR)
             {
                 bmp = g_redStar;
+            }
+            else if(sprite==TILE_GRAYSTAR)
+            {
+                bmp = g_grayStar;
             }
             if(bmp)
             {
@@ -570,6 +641,7 @@ int main ( int argc, char** argv )
     g_greenStar = loadImage((char*)"greenstar.bmp");
     g_yellowStar = loadImage((char*)"yellowstar.bmp");
     g_redStar = loadImage((char*)"redstar.bmp");
+    g_grayStar = loadImage((char*)"graystar.bmp");
 
     srand(time(0));
     reset();
@@ -662,12 +734,7 @@ int main ( int argc, char** argv )
             } // end switch
         } // end of message processing
 
-        if(g_died)
-        {
-            SDL_Delay(500);
-            reset();
-        }
-        else if(g_frames%interval==0 && !g_paused)
+        if(g_frames%interval==0 && !g_paused)
         {
             update();
         }

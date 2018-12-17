@@ -195,3 +195,9 @@
 	"begin_code.h"
 	"close_code.h"
 
+1545050444 source:f:\opensource\study_c\flappybird\main.cpp
+	<cstdlib>
+	<stdlib.h>
+	<time.h>
+	<SDL/SDL.h>
+

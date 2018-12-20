@@ -715,7 +715,6 @@ int main ( int argc, char** argv )
                 else if(g_state==OVER)
                 {
                     int x = event.button.x;
-                    \
                     int y = event.button.y;
                     if(x>=g_replayButton.x && x<=g_replayButton.right
                             && y>=g_replayButton.y && y<=g_replayButton.bottom)

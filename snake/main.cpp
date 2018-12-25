@@ -44,18 +44,18 @@ typedef struct
 {
     int x;
     int y;
-} Coordine;
+} Coordinate;
 
 typedef struct
 {
-    Coordine pos;
+    Coordinate pos;
     int distance;
     Dir relativeDir;
-} CoordineStep;
+} CoordinateStep;
 
 int g_Tiles[TILE_ROWS][TILE_COLUMNS];
-Coordine g_snake[TILE_COLUMNS*TILE_ROWS];
-Coordine g_apples[APPLE_COUNT] = {0};
+Coordinate g_snake[TILE_COLUMNS*TILE_ROWS];
+Coordinate g_apples[APPLE_COUNT] = {0};
 Dir g_nextDir;
 int g_snakeLength;
 float g_speed;
@@ -69,14 +69,14 @@ SDL_Surface *g_yellowStar;
 SDL_Surface *g_redStar;
 SDL_Surface *g_grayStar;
 
-int getNextReachablePosList(int distance[TILE_ROWS][TILE_COLUMNS], Coordine source, CoordineStep cs[]);
+int getNextReachablePosList(int distance[TILE_ROWS][TILE_COLUMNS], Coordinate source, CoordinateStep cs[]);
 
-int getDistance(Coordine c1, Coordine c2)
+int getDistance(Coordinate c1, Coordinate c2)
 {
     return abs(c1.x-c2.x) + abs(c1.y-c2.y);
 }
 
-Coordine getNextCoorFromDir(Coordine currentPos, Dir dir)
+Coordinate getNextCoorFromDir(Coordinate currentPos, Dir dir)
 {
     switch(dir)
     {
@@ -98,7 +98,7 @@ Coordine getNextCoorFromDir(Coordine currentPos, Dir dir)
     return currentPos;
 }
 
-Coordine getNextTilePos()
+Coordinate getNextTilePos()
 {
     return getNextCoorFromDir(g_snake[0], g_nextDir);
 }
@@ -120,7 +120,7 @@ void resetTiles()
     }
 }
 
-int removeFirst(Coordine a[], int arraySize)
+int removeFirst(Coordinate a[], int arraySize)
 {
     int i;
     for(i=1; i<arraySize; i++)
@@ -131,10 +131,10 @@ int removeFirst(Coordine a[], int arraySize)
 }
 
 void fillTileDistanceFromPos(int distance[TILE_ROWS][TILE_COLUMNS],
-                             Coordine pos,
-                             Coordine snake[],
+                             Coordinate pos,
+                             Coordinate snake[],
                              int snakeLength,
-                             Coordine apples[] = 0,
+                             Coordinate apples[] = 0,
                              int appleSize = 0)
 {
     int i,j;
@@ -159,16 +159,16 @@ void fillTileDistanceFromPos(int distance[TILE_ROWS][TILE_COLUMNS],
         distance[apples[i].y][apples[i].x] = DISTANCE_RIGID;
     }
     distance[pos.y][pos.x] = 0;
-    Coordine pointList[TILE_ROWS*TILE_COLUMNS];
+    Coordinate pointList[TILE_ROWS*TILE_COLUMNS];
     pointList[0] = pos;
     int remainPointsCount = 1;
     while(remainPointsCount)
     {
-        Coordine frontPos = pointList[0];
+        Coordinate frontPos = pointList[0];
         remainPointsCount = removeFirst(pointList, remainPointsCount);
         for(i=0; i<4; i++)
         {
-            Coordine nextPos = getNextCoorFromDir(frontPos, (Dir)i);
+            Coordinate nextPos = getNextCoorFromDir(frontPos, (Dir)i);
             if(distance[nextPos.y][nextPos.x] == DISTANCE_STUB)
             {
                 // Is empty tile
@@ -206,7 +206,7 @@ void reset()
     clearApples();
 }
 
-bool isApple(Coordine pos)
+bool isApple(Coordinate pos)
 {
     int j;
     for(j=0; j<APPLE_COUNT; j++)
@@ -219,7 +219,7 @@ bool isApple(Coordine pos)
     return false;
 }
 
-bool isSnakeBody(Coordine pos)
+bool isSnakeBody(Coordinate pos)
 {
     int j;
     for(j=1; j<g_snakeLength; j++)
@@ -232,7 +232,7 @@ bool isSnakeBody(Coordine pos)
     return false;
 }
 
-Dir coordineToDir(Coordine d)
+Dir CoordinateToDir(Coordinate d)
 {
     Dir i;
     if(d.x==0)
@@ -246,9 +246,9 @@ Dir coordineToDir(Coordine d)
     return i;
 }
 
-bool isReachable(Coordine snake[], int snakeLength, Coordine destination)
+bool isReachable(Coordinate snake[], int snakeLength, Coordinate destination)
 {
-    CoordineStep cs[4];
+    CoordinateStep cs[4];
     int distance[TILE_ROWS][TILE_COLUMNS];
     fillTileDistanceFromPos(distance, destination, snake, snakeLength);
     int posCount = getNextReachablePosList(distance, snake[0], cs);
@@ -262,18 +262,18 @@ bool isReachable(Coordine snake[], int snakeLength, Coordine destination)
 }
 
 bool canSimulate(int distanceTable[TILE_ROWS][TILE_COLUMNS],
-                 Coordine snake[],
+                 Coordinate snake[],
                  int snakeLength,
-                 Coordine destination)
+                 Coordinate destination)
 {
     if(snakeLength < 0)
         return false;
 
-    Coordine nextStep;
+    Coordinate nextStep;
     while(snake[0].x!=destination.x || snake[0].y!=destination.y)
     {
         int i;
-        CoordineStep minStep;
+        CoordinateStep minStep;
         minStep.distance = DISTANCE_STUB;
         for(i=0; i<DIR_COUNT; i++)
         {
@@ -298,13 +298,13 @@ bool canSimulate(int distanceTable[TILE_ROWS][TILE_COLUMNS],
     return isReachable(snake, snakeLength, snake[snakeLength-1]);
 }
 
-int getNextReachablePosList(int distance[TILE_ROWS][TILE_COLUMNS], Coordine pos, CoordineStep cs[])
+int getNextReachablePosList(int distance[TILE_ROWS][TILE_COLUMNS], Coordinate pos, CoordinateStep cs[])
 {
     int i;
     int index = 0;
     for(i=0; i<4; i++)
     {
-        Coordine nextPos = getNextCoorFromDir(pos, (Dir)i);
+        Coordinate nextPos = getNextCoorFromDir(pos, (Dir)i);
         int step = distance[nextPos.y][nextPos.x];
         if(step>=0 && step<DISTANCE_STUB)
         {
@@ -322,9 +322,9 @@ int getNextReachablePosList(int distance[TILE_ROWS][TILE_COLUMNS], Coordine pos,
     return index;
 }
 
-Dir findMinDistanceDir(int distanceTable[TILE_ROWS][TILE_COLUMNS], Coordine pos, Dir currentDir)
+Dir findMinDistanceDir(int distanceTable[TILE_ROWS][TILE_COLUMNS], Coordinate pos, Dir currentDir)
 {
-    CoordineStep cs[4];
+    CoordinateStep cs[4];
     int csSize = getNextReachablePosList(distanceTable, pos, cs);
     if(csSize < 0)
         return (Dir)(rand()%DIR_COUNT);
@@ -343,9 +343,9 @@ Dir findMinDistanceDir(int distanceTable[TILE_ROWS][TILE_COLUMNS], Coordine pos,
     return findDir;
 }
 
-Dir findMaxDistanceDir(int distanceTable[TILE_ROWS][TILE_COLUMNS], Coordine pos, Dir currentDir)
+Dir findMaxDistanceDir(int distanceTable[TILE_ROWS][TILE_COLUMNS], Coordinate pos, Dir currentDir)
 {
-    CoordineStep cs[4];
+    CoordinateStep cs[4];
     int csSize = getNextReachablePosList(distanceTable, pos, cs);
     if(csSize <= 0)
         return DIR_COUNT;
@@ -369,13 +369,13 @@ bool canEatApple()
     return false;
 }
 
-int getPathDeep(int distanceTable[TILE_ROWS][TILE_COLUMNS], Coordine pos)
+int getPathDeep(int distanceTable[TILE_ROWS][TILE_COLUMNS], Coordinate pos)
 {
     distanceTable[pos.y][pos.x] = DISTANCE_RIGID;
     int i;
     for(i=0; i<DIR_COUNT; i++)
     {
-        Coordine nextPos = getNextCoorFromDir(pos, (Dir)i);
+        Coordinate nextPos = getNextCoorFromDir(pos, (Dir)i);
         if(distanceTable[pos.y][pos.x] == DISTANCE_STUB)
         {
             return 1+getPathDeep(distanceTable, nextPos);
@@ -415,8 +415,8 @@ int getCloseApple()
 Dir getNextDir()
 {
     int distanceTable[TILE_ROWS][TILE_COLUMNS];
-    Coordine fakeSnake[TILE_ROWS*TILE_COLUMNS];
-    memcpy(fakeSnake, g_snake, sizeof(Coordine)*TILE_ROWS*TILE_COLUMNS);
+    Coordinate fakeSnake[TILE_ROWS*TILE_COLUMNS];
+    memcpy(fakeSnake, g_snake, sizeof(Coordinate)*TILE_ROWS*TILE_COLUMNS);
     int appleIndex = getCloseApple();
     fillTileDistanceFromPos(distanceTable, g_apples[appleIndex], g_snake, g_snakeLength);
     bool canEat = canSimulate(distanceTable, fakeSnake, g_snakeLength, g_apples[appleIndex]);
@@ -426,7 +426,7 @@ Dir getNextDir()
     }
     else
     {
-        Coordine snakeTail = g_snake[g_snakeLength-1];
+        Coordinate snakeTail = g_snake[g_snakeLength-1];
         bool canFollowTrail = isReachable(g_snake, g_snakeLength, snakeTail);
         if(canFollowTrail)
         {
@@ -448,9 +448,9 @@ Dir getNextDir()
     return g_nextDir;
 }
 
-Coordine fetchElement(Coordine el[], int arraySize, int index)
+Coordinate fetchElement(Coordinate el[], int arraySize, int index)
 {
-    Coordine result = {-1,-1};
+    Coordinate result = {-1,-1};
     if(index>=0 && index<arraySize)
     {
         int i;
@@ -478,7 +478,7 @@ void update()
 
     // clear snake
     int i;
-    Coordine nextPos = getNextTilePos();
+    Coordinate nextPos = getNextTilePos();
     if(g_Tiles[nextPos.y][nextPos.x] == TILE_GRAYSTAR || isSnakeBody(nextPos))
     {
 #ifdef _TEST
@@ -534,7 +534,7 @@ void update()
 
     // place apple
     // first find all the empty tiles
-    Coordine emptyTileList[TILE_ROWS*TILE_COLUMNS];
+    Coordinate emptyTileList[TILE_ROWS*TILE_COLUMNS];
     int emptyTileCount = 0;
     for(i=0; i<TILE_ROWS; i++)
     {

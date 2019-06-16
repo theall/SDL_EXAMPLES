@@ -1,0 +1,6 @@
+# depslib dependency file v1.0
+1544691624 source:f:\opensource\study_c\dice\main.c
+	<stdio.h>
+	<time.h>
+	<windows.h>
+
